@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juego: Frase al revés ↔ al derecho</title>
+  <style>
+    :root { --bg:#0f1220; --panel:#171a2b; --ink:#e8ecff; --muted:#96a2ff; --accent:#8be9fd; --good:#4ade80; --warn:#fbbf24; --bad:#fb7185; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b0e1a,#121629);color:var(--ink);}
+    header{padding:20px 16px;text-align:center}
+    h1{margin:0;font-size:clamp(22px,3.5vw,34px);letter-spacing:.2px}
+    main{max-width:920px;margin:0 auto;padding:12px 16px 40px;display:grid;gap:18px}
+    .card{background:var(--panel);border:1px solid #1f2342;border-radius:16px;padding:14px 14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .row > *{flex:1 1 auto}
+    label{font-size:14px;opacity:.9}
+    input[type=text]{width:100%;padding:12px 12px;border-radius:12px;background:#0f1330;border:1px solid #212757;color:var(--ink);outline:none}
+    input[type=text]::placeholder{color:#9aa7ff99}
+    button{appearance:none;border:0;border-radius:12px;padding:12px 14px;background:#23284d;color:var(--ink);font-weight:600;cursor:pointer;transition:.15s transform,.15s filter,.2s background}
+    button:hover{filter:brightness(1.08)}
+    button:active{transform:translateY(1px)}
+    button.primary{background:linear-gradient(135deg,#3b82f6,#8b5cf6)}
+    button.ghost{background:transparent;border:1px solid #2a2f5d}
+    button.good{background:linear-gradient(135deg,#22c55e,#16a34a)}
+    button.warn{background:linear-gradient(135deg,#f59e0b,#eab308)}
+    button.bad{background:linear-gradient(135deg,#ef4444,#f43f5e)}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:#0f1330;border:1px solid #26306b;font-size:12px;color:var(--muted)}
+    .small{font-size:12px;color:#b6c1ffbf}
+    canvas{width:100%;height:72px;background:#0b0f29;border-radius:10px;border:1px solid #212757}
+    audio{width:100%}
+    .grid{display:grid;gap:12px}
+    .cols-2{grid-template-columns:1fr 1fr}
+    .center{display:flex;justify-content:center;align-items:center}
+    .score{font-weight:800;font-size:clamp(22px,5vw,40px)}
+    .score.good{color:var(--good)}
+    .score.mid{color:var(--warn)}
+    .score.bad{color:var(--bad)}
+    .help{font-size:13px;line-height:1.4;color:#c7cfffb3}
+    .mute{opacity:.6}
+    .spacer{height:6px}
+    .links a{color:var(--accent);text-decoration:none}
+    .links a:hover{text-decoration:underline}
+    .hidden{display:none !important}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎙️ Juego de voz: dilo normal → te lo pongo <i>backwards</i> → tú lo intentas → lo volvemos al derecho</h1>
+    <p class="small mute">Consejo: ábrelo en <b>https</b> o en <b>localhost</b> para que el micro funcione (requisito del navegador).</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="grid">
+        <div class="row">
+          <label for="phrase">Frase objetivo (solo para referencia, no se usa STT):</label>
+          <input id="phrase" type="text" placeholder="Escribe aquí la frase que vas a decir (opcional)">
+        </div>
+        <div class="row">
+          <span class="pill">Micrófono: <b id="permState">pendiente</b></span>
+          <div class="spacer"></div>
+          <button id="btnPerms" class="ghost">Conceder permiso</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>1) Tú dices la frase normal</h3>
+      <div class="grid cols-2">
+        <div>
+          <div class="row">
+            <button id="rec1" class="primary">⏺️ Grabar frase</button>
+            <button id="stop1" class="bad" disabled>⏹️ Detener</button>
+          </div>
+          <p id="status1" class="help">Pulsa “Grabar frase”, habla claro y luego “Detener”.</p>
+          <audio id="audio1" controls class="hidden"></audio>
+          <canvas id="wave1"></canvas>
+        </div>
+        <div>
+          <div class="row">
+            <button id="playRev1" class="warn" disabled>🔁 Reproducir al revés</button>
+            <button id="dl1" class="ghost" disabled>⬇️ Descargar frase</button>
+          </div>
+          <p class="help">Así es como suena tu frase invertida.</p>
+          <audio id="audio1rev" controls class="hidden"></audio>
+          <canvas id="wave1rev"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>2) Tu compa intenta decirla <i>backwards</i></h3>
+      <div class="grid cols-2">
+        <div>
+          <div class="row">
+            <button id="rec2" class="primary" disabled>⏺️ Grabar intento backwards</button>
+            <button id="stop2" class="bad" disabled>⏹️ Detener</button>
+          </div>
+          <p id="status2" class="help">Primero escucha la versión invertida. Luego graba tu intento.</p>
+          <audio id="audio2" controls class="hidden"></audio>
+          <canvas id="wave2"></canvas>
+        </div>
+        <div>
+          <div class="row">
+            <button id="playFix2" class="good" disabled>↩️ Volver al derecho</button>
+            <button id="dl2" class="ghost" disabled>⬇️ Descargar intento</button>
+          </div>
+          <p class="help">Esto es tu intento, pero revertido otra vez (debería sonar parecido al original).</p>
+          <audio id="audio2fix" controls class="hidden"></audio>
+          <canvas id="wave2fix"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>3) ¿Se parecen? (métrica simple)</h3>
+      <div class="grid cols-2">
+        <div class="center">
+          <div>
+            <div class="score" id="score">—</div>
+            <div class="help">0–100 (aprox). Tómatelo como guía visual, ¡el jurado sois vosotros! 👀</div>
+          </div>
+        </div>
+        <div>
+          <div class="row">
+            <button id="btnCompare" class="ghost" disabled>📏 Calcular similitud</button>
+            <button id="btnReset" class="ghost">♻️ Reiniciar</button>
+          </div>
+          <p class="help">La puntuación usa una comparación de forma de onda (coseno) tras normalizar y ajustar a tamaño.</p>
+          <div class="links small">Hecho con Web Audio API. Código MIT.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  // State
+  let mediaStream = null;
+  let mediaRecorder1 = null, mediaRecorder2 = null;
+  let chunks1 = [], chunks2 = [];
+  let blob1 = null, blob2 = null;
+  let ctx = null;
+
+  // Decoded buffers
+  let buf1 = null;        // original (forward)
+  let buf1Rev = null;     // original reversed
+  let buf2 = null;        // attempt (backwards spoken)
+  let buf2Fix = null;     // attempt reversed back (should match buf1)
+
+  // Elements
+  const permState = document.getElementById('permState');
+  const btnPerms = document.getElementById('btnPerms');
+
+  const rec1 = document.getElementById('rec1');
+  const stop1 = document.getElementById('stop1');
+  const status1 = document.getElementById('status1');
+  const audio1 = document.getElementById('audio1');
+  const audio1rev = document.getElementById('audio1rev');
+  const wave1 = document.getElementById('wave1');
+  const wave1rev = document.getElementById('wave1rev');
+  const playRev1 = document.getElementById('playRev1');
+  const dl1 = document.getElementById('dl1');
+
+  const rec2 = document.getElementById('rec2');
+  const stop2 = document.getElementById('stop2');
+  const status2 = document.getElementById('status2');
+  const audio2 = document.getElementById('audio2');
+  const audio2fix = document.getElementById('audio2fix');
+  const wave2 = document.getElementById('wave2');
+  const wave2fix = document.getElementById('wave2fix');
+  const playFix2 = document.getElementById('playFix2');
+  const dl2 = document.getElementById('dl2');
+
+  const scoreEl = document.getElementById('score');
+  const btnCompare = document.getElementById('btnCompare');
+  const btnReset = document.getElementById('btnReset');
+
+  // Helpers
+  function ensureCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+
+  async function requestMic() {
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      permState.textContent = 'concedido';
+      btnPerms.disabled = true;
+    } catch (e) {
+      permState.textContent = 'denegado';
+      alert('No se pudo acceder al micrófono. Abre el archivo en https/localhost y concede permisos.');
+      throw e;
+    }
+  }
+
+  function armRecorder(which) {
+    const mr = new MediaRecorder(mediaStream, { mimeType: 'audio/webm' });
+    const chunks = [];
+    mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      if (which === 1) {
+        blob1 = blob;
+        await handleRecordedBlob(blob1, 1);
+      } else {
+        blob2 = blob;
+        await handleRecordedBlob(blob2, 2);
+      }
+    };
+    return { mr, chunks };
+  }
+
+  async function handleRecordedBlob(blob, which) {
+    const arrayBuf = await blob.arrayBuffer();
+    const audioCtx = ensureCtx();
+    const decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0));
+
+    // Show audio element and waveform
+    if (which === 1) {
+      buf1 = decoded;
+      audio1.src = URL.createObjectURL(blob);
+      audio1.classList.remove('hidden');
+      drawWaveform(decoded, wave1);
+      // Precompute reversed original
+      buf1Rev = reverseBuffer(decoded);
+      const revBlob = await bufferToBlob(buf1Rev, audioCtx.sampleRate);
+      audio1rev.src = URL.createObjectURL(revBlob);
+      audio1rev.classList.remove('hidden');
+      drawWaveform(buf1Rev, wave1rev);
+      playRev1.disabled = false;
+      dl1.disabled = false;
+      rec2.disabled = false;
+      status1.textContent = '¡Grabado! Reprodúcela al revés o pasa al paso 2.';
+    } else {
+      buf2 = decoded;
+      audio2.src = URL.createObjectURL(blob);
+      audio2.classList.remove('hidden');
+      drawWaveform(decoded, wave2);
+      // Precompute fixed (reversed back) attempt
+      buf2Fix = reverseBuffer(decoded);
+      const fixBlob = await bufferToBlob(buf2Fix, ensureCtx().sampleRate);
+      audio2fix.src = URL.createObjectURL(fixBlob);
+      audio2fix.classList.remove('hidden');
+      drawWaveform(buf2Fix, wave2fix);
+      playFix2.disabled = false;
+      dl2.disabled = false;
+      btnCompare.disabled = !(buf1 && buf2Fix);
+      status2.textContent = '¡Listo! Ahora puedes “Volver al derecho” y comparar.';
+    }
+  }
+
+  function reverseBuffer(buffer) {
+    const audioCtx = ensureCtx();
+    const out = audioCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const src = buffer.getChannelData(ch);
+      const dst = out.getChannelData(ch);
+      for (let i = 0, j = src.length - 1; i < src.length; i++, j--) {
+        dst[i] = src[j];
+      }
+    }
+    return out;
+  }
+
+  function playBuffer(buffer) {
+    const audioCtx = ensureCtx();
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioCtx.destination);
+    src.start();
+  }
+
+  function drawWaveform(buffer, canvas) {
+    const ctx2 = canvas.getContext('2d');
+    const W = canvas.width = canvas.clientWidth * devicePixelRatio;
+    const H = canvas.height = canvas.clientHeight * devicePixelRatio;
+    ctx2.clearRect(0,0,W,H);
+    ctx2.fillStyle = '#0b0f29';
+    ctx2.fillRect(0,0,W,H);
+    ctx2.lineWidth = 2 * devicePixelRatio;
+    ctx2.strokeStyle = '#8be9fd';
+    ctx2.beginPath();
+
+    const ch = buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0);
+    const step = Math.ceil(ch.length / W);
+    const amp = H / 2 * 0.9;
+    for (let x = 0; x < W; x++) {
+      const start = x * step;
+      let min = 1, max = -1;
+      for (let i = 0; i < step && start + i < ch.length; i++) {
+        const v = ch[start + i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      ctx2.moveTo(x, (1 - min) * amp + (H - 2*amp)/2);
+      ctx2.lineTo(x, (1 - max) * amp + (H - 2*amp)/2);
+    }
+    ctx2.stroke();
+  }
+
+  function mixToMono(buffer) {
+    const len = buffer.length;
+    const tmp = new Float32Array(len);
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < len; i++) tmp[i] += data[i];
+    }
+    for (let i = 0; i < len; i++) tmp[i] /= buffer.numberOfChannels;
+    return tmp;
+  }
+
+  async function bufferToBlob(buffer, sampleRate) {
+    // Render to offline audio and export as WAV (simple PCM16)
+    const chData = [];
+    const channels = buffer.numberOfChannels;
+    for (let ch = 0; ch < channels; ch++) chData.push(buffer.getChannelData(ch));
+    const interleaved = interleaveIfNeeded(chData);
+    const wav = pcm16ToWav(interleaved, sampleRate, channels);
+    return new Blob([wav], { type: 'audio/wav' });
+  }
+
+  function interleaveIfNeeded(chArrays) {
+    if (chArrays.length === 1) return chArrays[0];
+    const length = chArrays[0].length;
+    const out = new Float32Array(length * chArrays.length);
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < chArrays.length; ch++) {
+        out[i * chArrays.length + ch] = chArrays[ch][i];
+      }
+    }
+    return out;
+  }
+
+  function pcm16ToWav(samples, sampleRate, numChannels=1) {
+    const bytesPerSample = 2;
+    const blockAlign = numChannels * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+    const view = new DataView(buffer);
+    let offset = 0;
+    function writeString(s){ for(let i=0;i<s.length;i++) view.setUint8(offset++, s.charCodeAt(i)); }
+    function writeUint32(v){ view.setUint32(offset, v, true); offset += 4; }
+    function writeUint16(v){ view.setUint16(offset, v, true); offset += 2; }
+
+    // RIFF header
+    writeString('RIFF');
+    writeUint32(36 + samples.length * bytesPerSample);
+    writeString('WAVE');
+    // fmt chunk
+    writeString('fmt ');
+    writeUint32(16);
+    writeUint16(1); // PCM
+    writeUint16(numChannels);
+    writeUint32(sampleRate);
+    writeUint32(sampleRate * blockAlign);
+    writeUint16(blockAlign);
+    writeUint16(16); // bits per sample
+    // data chunk
+    writeString('data');
+    writeUint32(samples.length * bytesPerSample);
+    // samples
+    for (let i = 0; i < samples.length; i++) {
+      let s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+    return view;
+  }
+
+  function resampleMonoTo(array, newLen) {
+    const out = new Float32Array(newLen);
+    const factor = (array.length - 1) / (newLen - 1);
+    for (let i = 0; i < newLen; i++) {
+      const pos = i * factor;
+      const idx = Math.floor(pos);
+      const frac = pos - idx;
+      const a = array[idx] || 0;
+      const b = array[idx + 1] || 0;
+      out[i] = a + (b - a) * frac;
+    }
+    return out;
+  }
+
+  function cosineSimilarity(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i], y = b[i];
+      dot += x * y; na += x * x; nb += y * y;
+    }
+    if (na === 0 || nb === 0) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+  }
+
+  function normalizeZeroMeanUnitVar(arr) {
+    let mean = 0;
+    for (let i = 0; i < arr.length; i++) mean += arr[i];
+    mean /= arr.length;
+    let varsum = 0;
+    for (let i = 0; i < arr.length; i++) { const v = arr[i] - mean; varsum += v*v; }
+    const std = Math.sqrt(varsum / arr.length) || 1;
+    const out = new Float32Array(arr.length);
+    for (let i = 0; i < arr.length; i++) out[i] = (arr[i] - mean) / std;
+    return out;
+  }
+
+  function monoFromBuffer(buffer) {
+    return buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0);
+  }
+
+  function scoreSimilarity(orig, attempt) {
+    // Downsample both to common fixed length for coarse comparison
+    const TARGET = 16000; // ~1s resolution if rescaled; purely for comparison
+    const a = resampleMonoTo(monoFromBuffer(orig), TARGET);
+    const b = resampleMonoTo(monoFromBuffer(attempt), TARGET);
+    const an = normalizeZeroMeanUnitVar(a);
+    const bn = normalizeZeroMeanUnitVar(b);
+    const cos = cosineSimilarity(an, bn);
+    // Map [-1,1] → [0,100], emphasize positives
+    const pct = Math.max(0, cos) * 100;
+    return Math.round(pct);
+  }
+
+  // Wire up permissions
+  btnPerms.addEventListener('click', requestMic);
+  permState.textContent = 'pendiente';
+
+  // Recording 1
+  rec1.addOnlyOnce = false;
+  rec1.addEventListener('click', async () => {
+    if (!mediaStream) await requestMic();
+    const { mr } = armRecorder(1);
+    mediaRecorder1 = mr;
+    chunks1 = [];
+    mr.start();
+    rec1.disabled = true; stop1.disabled = false;
+    status1.textContent = 'Grabando…';
+  });
+
+  stop1.addEventListener('click', () => {
+    if (mediaRecorder1 && mediaRecorder1.state !== 'inactive') {
+      mediaRecorder1.stop();
+      stop1.disabled = true;
+      rec1.disabled = false;
+      status1.textContent = 'Procesando audio…';
+    }
+  });
+
+  playRev1.addEventListener('click', () => {
+    if (buf1Rev) playBuffer(buf1Rev);
+  });
+
+  dl1.addEventListener('click', () => {
+    if (!blob1) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob1);
+    a.download = 'frase-original.webm';
+    a.click();
+  });
+
+  // Recording 2
+  rec2.addEventListener('click', async () => {
+    if (!mediaStream) await requestMic();
+    const { mr } = armRecorder(2);
+    mediaRecorder2 = mr;
+    chunks2 = [];
+    mr.start();
+    rec2.disabled = true; stop2.disabled = false;
+    status2.textContent = 'Grabando intento backwards…';
+  });
+
+  stop2.addEventListener('click', () => {
+    if (mediaRecorder2 && mediaRecorder2.state !== 'inactive') {
+      mediaRecorder2.stop();
+      stop2.disabled = true;
+      rec2.disabled = false;
+      status2.textContent = 'Procesando audio…';
+    }
+  });
+
+  playFix2.addEventListener('click', () => {
+    if (buf2Fix) playBuffer(buf2Fix);
+  });
+
+  dl2.addEventListener('click', () => {
+    if (!blob2) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob2);
+    a.download = 'intento-backwards.webm';
+    a.click();
+  });
+
+  // Compare
+  btnCompare.addEventListener('click', () => {
+    if (!(buf1 && buf2Fix)) return;
+    const s = scoreSimilarity(buf1, buf2Fix);
+    scoreEl.textContent = s + ' / 100';
+    scoreEl.classList.remove('good','mid','bad');
+    scoreEl.classList.add(s >= 70 ? 'good' : s >= 40 ? 'mid' : 'bad');
+  });
+
+  // Reset
+  btnReset.addEventListener('click', () => {
+    // Clear state (except mic permission)
+    [audio1, audio1rev, audio2, audio2fix].forEach(a => { a.src=''; a.classList.add('hidden'); });
+    [wave1, wave1rev, wave2, wave2fix].forEach(c => { const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); });
+    blob1=blob2=null; buf1=buf1Rev=buf2=buf2Fix=null;
+    playRev1.disabled = true; playFix2.disabled = true; btnCompare.disabled = true;
+    rec2.disabled = true; dl1.disabled = true; dl2.disabled = true;
+    scoreEl.textContent = '—'; scoreEl.classList.remove('good','mid','bad');
+    status1.textContent = 'Pulsa “Grabar frase”, habla claro y luego “Detener”.';
+    status2.textContent = 'Primero escucha la versión invertida. Luego graba tu intento.';
+  });
+
+  // Auto-kick mic request on first interaction for convenience
+  window.addEventListener('click', () => {
+    if (permState.textContent === 'pendiente') {
+      // no auto-request (browsers can block), keep manual button
+    }
+  }, { once:true });
+})();
+</script>
+</body>
+</html>

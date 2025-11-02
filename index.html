@@ -58,10 +58,22 @@
     .mute{opacity:.75}
     .hidden{display:none !important}
     canvas{
-      width:100%;height:64px; /* más compacto en móvil */
+      width:100%;height:64px;
       background:#0b0f29;border-radius:10px;border:1px solid #212757
     }
     @media (min-width:900px){ canvas{height:72px} }
+
+    /* Estado de GRABACIÓN visible */
+    .recording{
+      background:linear-gradient(135deg,#b91c1c,#ef4444) !important;
+      box-shadow:0 0 0 0 rgba(239,68,68,.75);
+      animation:pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse{
+      0%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}
+      70%{box-shadow:0 0 0 12px rgba(239,68,68,0)}
+      100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}
+    }
   </style>
 </head>
 <body>
@@ -218,9 +230,7 @@
       audio1rev.classList.remove('hidden');
       drawWaveform(buf1Rev, wave1rev);
 
-      playRev1.disabled = false; dl1.disabled = true; // descarga original también posible
-      rec2.disabled = false;
-      dl1.disabled = false;
+      playRev1.disabled = false; dl1.disabled = false; rec2.disabled = false;
     } else {
       buf2 = decoded;
       audio2.src = URL.createObjectURL(blob);
@@ -247,14 +257,6 @@
       for (let i = 0, j = src.length - 1; i < src.length; i++, j--) dst[i] = src[j];
     }
     return out;
-  }
-
-  function playBuffer(buffer) {
-    const audioCtx = ensureCtx();
-    const src = audioCtx.createBufferSource();
-    src.buffer = buffer;
-    src.connect(audioCtx.destination);
-    src.start();
   }
 
   function drawWaveform(buffer, canvas) {
@@ -367,40 +369,65 @@
   permState.textContent = 'pendiente';
   btnPerms.addEventListener('click', requestMic);
 
+  // REC 1
   rec1.addEventListener('click', async () => {
     if (!mediaStream) await requestMic();
     const { mr } = armRecorder(1);
+    ensureCtx().resume?.();
     mediaRecorder1 = mr; chunks1 = []; mr.start();
     rec1.disabled = true; stop1.disabled = false;
+    rec1.classList.add('recording');
+    rec1.textContent = '⏺️ Grabando…';
   });
   stop1.addEventListener('click', () => {
     if (mediaRecorder1 && mediaRecorder1.state !== 'inactive'){
       mediaRecorder1.stop(); stop1.disabled = true; rec1.disabled = false;
+      rec1.classList.remove('recording');
+      rec1.textContent = '⏺️ Grabar';
     }
   });
-  playRev1.addEventListener('click', () => { if (buf1Rev) playBuffer(buf1Rev); });
-  dl1.addEventListener('click', () => {
-    if (!blob1) return; const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob1); a.download = 'frase-original.webm'; a.click();
-  });
 
+  // REC 2
   rec2.addEventListener('click', async () => {
     if (!mediaStream) await requestMic();
     const { mr } = armRecorder(2);
+    ensureCtx().resume?.();
     mediaRecorder2 = mr; chunks2 = []; mr.start();
     rec2.disabled = true; stop2.disabled = false;
+    rec2.classList.add('recording');
+    rec2.textContent = '⏺️ Grabando…';
   });
   stop2.addEventListener('click', () => {
     if (mediaRecorder2 && mediaRecorder2.state !== 'inactive'){
       mediaRecorder2.stop(); stop2.disabled = true; rec2.disabled = false;
+      rec2.classList.remove('recording');
+      rec2.textContent = '⏺️ Grabar intento';
     }
   });
-  playFix2.addEventListener('click', () => { if (buf2Fix) playBuffer(buf2Fix); });
+
+  // Reproducir con los BOTONES (y mostrar barra)
+  playRev1.addEventListener('click', async () => {
+    if (!audio1rev.src) return;
+    audio1rev.classList.remove('hidden');
+    try { await ensureCtx().resume?.(); await audio1rev.play(); } catch {}
+  });
+  playFix2.addEventListener('click', async () => {
+    if (!audio2fix.src) return;
+    audio2fix.classList.remove('hidden');
+    try { await ensureCtx().resume?.(); await audio2fix.play(); } catch {}
+  });
+
+  // Descargas
+  dl1.addEventListener('click', () => {
+    if (!blob1) return; const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob1); a.download = 'frase-original.webm'; a.click();
+  });
   dl2.addEventListener('click', () => {
     if (!blob2) return; const a = document.createElement('a');
     a.href = URL.createObjectURL(blob2); a.download = 'intento-backwards.webm'; a.click();
   });
 
+  // Comparar
   btnCompare.addEventListener('click', () => {
     if (!(buf1 && buf2Fix)) return;
     const s = scoreSimilarity(buf1, buf2Fix);
@@ -409,12 +436,15 @@
     scoreEl.classList.add(s >= 70 ? 'good' : s >= 40 ? 'mid' : 'bad');
   });
 
+  // Reset
   btnReset.addEventListener('click', () => {
-    [audio1,audio1rev,audio2,audio2fix].forEach(a => { a.src=''; a.classList.add('hidden'); });
+    [audio1,audio1rev,audio2,audio2fix].forEach(a => { a.pause?.(); a.src=''; a.classList.add('hidden'); });
     [wave1,wave1rev,wave2,wave2fix].forEach(c => { const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); });
     blob1=blob2=null; buf1=buf1Rev=buf2=buf2Fix=null;
     playRev1.disabled = true; playFix2.disabled = true; btnCompare.disabled = true;
     rec2.disabled = true; dl1.disabled = true; dl2.disabled = true;
+    rec1.classList.remove('recording'); rec1.textContent='⏺️ Grabar';
+    rec2.classList.remove('recording'); rec2.textContent='⏺️ Grabar intento';
     scoreEl.textContent = '—'; scoreEl.classList.remove('good','mid','bad');
   });
 })();
